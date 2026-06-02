@@ -19,7 +19,9 @@ from sqlalchemy.orm import Session
 from ..models import (
     Competition,
     DataSource,
+    FundamentalNote,
     Match,
+    MatchContext,
     MatchPlayerStat,
     MatchTeamStat,
     Player,
@@ -446,3 +448,56 @@ def upsert_match_player_stat(
     row.yellow_cards = dto.yellow_cards
     row.red_cards = dto.red_cards
     return row
+
+
+# ---------------------------------------------------------------------------
+# Pre-match context & fundamentals
+# ---------------------------------------------------------------------------
+def upsert_match_context(session: Session, match_id: int, **fields) -> MatchContext:
+    """Idempotent per-match context (referee, weather, importance, travel...)."""
+    ctx = session.scalar(
+        select(MatchContext).where(MatchContext.match_id == match_id)
+    )
+    if ctx is None:
+        ctx = MatchContext(match_id=match_id)
+        session.add(ctx)
+    allowed = {
+        "referee", "attendance", "importance", "weather",
+        "travel_km_home", "travel_km_away",
+    }
+    for key, value in fields.items():
+        if key in allowed:
+            setattr(ctx, key, value)
+    session.flush()
+    return ctx
+
+
+def upsert_fundamental_note(
+    session: Session,
+    kind: str,
+    match_id: Optional[int] = None,
+    team_id: Optional[int] = None,
+    payload: Optional[dict] = None,
+    source: Optional[DataSource] = None,
+    source_url: Optional[str] = None,
+    source_quality: Optional[str] = None,
+    as_of: Optional[datetime] = None,
+) -> FundamentalNote:
+    """Structured note (line-up/injury/suspension), one per (match, team, kind)."""
+    note = session.scalar(
+        select(FundamentalNote).where(
+            FundamentalNote.match_id == match_id,
+            FundamentalNote.team_id == team_id,
+            FundamentalNote.kind == kind,
+        )
+    )
+    if note is None:
+        note = FundamentalNote(match_id=match_id, team_id=team_id, kind=kind)
+        session.add(note)
+    note.payload = payload
+    note.source_id = source.id if source else None
+    note.source_url = source_url
+    note.source_quality = source_quality
+    note.as_of = as_of
+    session.flush()
+    return note

@@ -219,6 +219,14 @@ class MatchTeamStat(TimestampMixin, Base):
     points: Mapped[Optional[int]] = mapped_column(Integer)
     result: Mapped[Optional[str]] = mapped_column(String(1))  # w / d / l
 
+    # Match-level team stats not provided by Understat (filled by other sources).
+    shots_total: Mapped[Optional[int]] = mapped_column(Integer)
+    shots_on_target: Mapped[Optional[int]] = mapped_column(Integer)
+    corners: Mapped[Optional[int]] = mapped_column(Integer)
+    yellow_cards: Mapped[Optional[int]] = mapped_column(Integer)
+    red_cards: Mapped[Optional[int]] = mapped_column(Integer)
+    possession: Mapped[Optional[float]] = mapped_column(Float)  # 0-100 (%)
+
 
 class MatchPlayerStat(TimestampMixin, Base):
     """One player's line in a single match (Understat roster row)."""

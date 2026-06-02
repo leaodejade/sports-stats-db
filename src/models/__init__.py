@@ -1,7 +1,8 @@
 """ORM models. Importing this package registers every table on ``Base.metadata``."""
 
 from ..database.base import Base
-from . import betting, features, football, tennis  # noqa: F401  (import for side effect: table registration)
+from . import betting, context, features, football, tennis  # noqa: F401  (import for side effect: table registration)
+from .context import FundamentalNote, MatchContext
 from .betting import (
     BankrollTransaction,
     BetDecision,
@@ -77,4 +78,7 @@ __all__ = [
     "BetDecision",
     # features
     "PrematchFeature",
+    # context
+    "MatchContext",
+    "FundamentalNote",
 ]
