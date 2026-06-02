@@ -52,6 +52,8 @@ class DataSource(TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     base_url: Mapped[Optional[str]] = mapped_column(String(255))
     description: Mapped[Optional[str]] = mapped_column(String(255))
+    # Coarse confidence in this source: "high" | "medium" | "low".
+    reliability: Mapped[Optional[str]] = mapped_column(String(20))
 
 
 # ---------------------------------------------------------------------------
@@ -148,7 +150,12 @@ class Match(TimestampMixin, Base):
     home_xg: Mapped[Optional[float]] = mapped_column(Float)
     away_xg: Mapped[Optional[float]] = mapped_column(Float)
 
-    # Understat win/draw/loss forecast (home perspective).
+    # Understat win/draw/loss "forecast" (home perspective).
+    # WARNING: for finished matches this is a POST-match retrodiction derived
+    # from that match's own shot xG (corr ~0.997 with a Poisson model on the
+    # same xG). It is NOT available pre-kickoff -- never use it as a pre-match
+    # feature or in a betting backtest (it leaks the result). Store real
+    # pre-match model output in the ``predictions`` table instead.
     forecast_w: Mapped[Optional[float]] = mapped_column(Float)
     forecast_d: Mapped[Optional[float]] = mapped_column(Float)
     forecast_l: Mapped[Optional[float]] = mapped_column(Float)

@@ -1,5 +1,6 @@
 """Transformers: raw source payloads -> validated DTOs."""
 
+from .betting import BetDTO, MarketResultDTO, OddsDTO, PredictionDTO
 from .understat_transformer import (
     MatchDTO,
     PlayerMatchDTO,
@@ -26,4 +27,9 @@ __all__ = [
     "transform_league_players",
     "transform_match_shots",
     "transform_roster",
+    # betting DTOs
+    "OddsDTO",
+    "PredictionDTO",
+    "MarketResultDTO",
+    "BetDTO",
 ]

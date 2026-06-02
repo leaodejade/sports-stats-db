@@ -24,7 +24,12 @@ _session_factory: Optional[sessionmaker] = None
 
 
 def _enable_sqlite_fk(engine: Engine) -> None:
-    """Enforce foreign keys on SQLite (off by default)."""
+    """Tune SQLite: enforce foreign keys and use WAL for concurrent writes.
+
+    WAL lets readers and a writer work at the same time, which matters when an
+    odds scraper streams snapshots while analytics read the same DB. (Ignored
+    for ``:memory:`` databases, where WAL is not applicable.)
+    """
     if engine.dialect.name != "sqlite":
         return
 
@@ -32,6 +37,11 @@ def _enable_sqlite_fk(engine: Engine) -> None:
     def _set_pragma(dbapi_connection, _connection_record):  # noqa: ANN001
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
+        try:
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA synchronous=NORMAL")
+        except Exception:  # noqa: BLE001 - WAL unsupported (e.g. in-memory): ignore
+            pass
         cursor.close()
 
 

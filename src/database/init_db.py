@@ -23,7 +23,25 @@ DEFAULT_SOURCES = (
         "name": "understat",
         "base_url": "https://understat.com",
         "description": "Expected-goals data for 6 European leagues since 2014/15.",
+        "reliability": "high",
     },
+)
+
+# Betting reference data (markets + a starter set of bookmakers).
+DEFAULT_MARKETS = (
+    {"code": "1x2", "name": "Match Result (1X2)"},
+    {"code": "ou", "name": "Over/Under Totals"},
+    {"code": "btts", "name": "Both Teams To Score"},
+    {"code": "ah", "name": "Asian Handicap"},
+    {"code": "dc", "name": "Double Chance"},
+    {"code": "corners", "name": "Corners"},
+    {"code": "cards", "name": "Cards"},
+)
+DEFAULT_BOOKMAKERS = (
+    {"name": "Bet365"},
+    {"name": "Betano"},
+    {"name": "Pinnacle"},
+    {"name": "Superbet"},
 )
 
 
@@ -38,8 +56,14 @@ def create_all(engine: Optional[Engine] = None) -> Engine:
 
 
 def seed_reference_data(engine: Optional[Engine] = None) -> None:
-    """Insert sports, data sources and tennis surfaces if missing."""
-    from ..models import DataSource, Sport, TennisSurface  # lazy import
+    """Insert sports, data sources, tennis surfaces, markets and bookmakers."""
+    from ..models import (  # lazy import
+        Bookmaker,
+        DataSource,
+        Market,
+        Sport,
+        TennisSurface,
+    )
 
     engine = engine or get_engine()
     with session_scope(engine) as session:
@@ -58,6 +82,12 @@ def seed_reference_data(engine: Optional[Engine] = None) -> None:
             )
             if exists is None:
                 session.add(TennisSurface(name=surface))
+        for market in DEFAULT_MARKETS:
+            if session.scalar(select(Market).where(Market.code == market["code"])) is None:
+                session.add(Market(**market))
+        for bk in DEFAULT_BOOKMAKERS:
+            if session.scalar(select(Bookmaker).where(Bookmaker.name == bk["name"])) is None:
+                session.add(Bookmaker(**bk))
 
 
 def init_db(engine: Optional[Engine] = None) -> Engine:
