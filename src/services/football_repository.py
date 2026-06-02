@@ -8,6 +8,8 @@ need them immediately (e.g. to wire foreign keys).
 
 from __future__ import annotations
 
+import re
+import unicodedata
 from datetime import datetime
 from typing import Optional
 
@@ -27,7 +29,79 @@ from ..models import (
     Sport,
     Standing,
     Team,
+    TeamAlias,
 )
+
+# Tokens dropped when normalising a club name (so "Arsenal FC" == "Arsenal").
+_DROP_TOKENS = {"fc", "afc", "cf", "sc", "club", "the", "de", "ud", "cd"}
+
+
+def normalize_team_name(name: Optional[str]) -> str:
+    """Lower-case, strip accents/punctuation and common club tokens.
+
+    Conservative on purpose: it only folds case/accents/punctuation and a small
+    set of generic suffixes, so distinct clubs are never merged by accident.
+    """
+    if not name:
+        return ""
+    text = unicodedata.normalize("NFKD", str(name))
+    text = "".join(c for c in text if not unicodedata.combining(c))
+    text = text.lower()
+    text = re.sub(r"[^a-z0-9 ]+", " ", text)
+    tokens = [t for t in text.split() if t and t not in _DROP_TOKENS]
+    return " ".join(tokens)
+
+
+def record_team_alias(
+    session: Session,
+    team: Team,
+    raw_name: Optional[str],
+    source: Optional[DataSource] = None,
+) -> None:
+    """Map ``normalize_team_name(raw_name)`` -> ``team`` (idempotent, safe).
+
+    Skips empty names and refuses to re-point an alias already owned by a
+    different team (avoids accidental merges).
+    """
+    alias = normalize_team_name(raw_name)
+    if not alias:
+        return
+    existing = session.scalar(
+        select(TeamAlias).where(
+            TeamAlias.sport_id == team.sport_id, TeamAlias.alias == alias
+        )
+    )
+    if existing is not None:
+        return
+    session.add(
+        TeamAlias(
+            sport_id=team.sport_id,
+            team_id=team.id,
+            source_id=source.id if source else None,
+            alias=alias,
+        )
+    )
+    session.flush()
+
+
+def find_team(session: Session, sport: Sport, name: Optional[str]) -> Optional[Team]:
+    """Resolve a team by name WITHOUT creating one (exact name, then alias)."""
+    if not name:
+        return None
+    team = session.scalar(
+        select(Team).where(Team.sport_id == sport.id, Team.name == name)
+    )
+    if team is not None:
+        return team
+    alias = normalize_team_name(name)
+    if not alias:
+        return None
+    hit = session.scalar(
+        select(TeamAlias).where(
+            TeamAlias.sport_id == sport.id, TeamAlias.alias == alias
+        )
+    )
+    return session.get(Team, hit.team_id) if hit is not None else None
 from ..transformers import (
     MatchDTO,
     PlayerMatchDTO,
@@ -55,10 +129,9 @@ def get_or_create_team(
                 Team.sport_id == sport.id, Team.external_id == external_id
             )
         )
+    # Resolve by exact name, then by known alias, before creating a new row.
     if team is None and name:
-        team = session.scalar(
-            select(Team).where(Team.sport_id == sport.id, Team.name == name)
-        )
+        team = find_team(session, sport, name)
     if team is None:
         team = Team(
             sport_id=sport.id,
@@ -68,6 +141,8 @@ def get_or_create_team(
         )
         session.add(team)
         session.flush()
+        record_team_alias(session, team, team.name, source)
+        record_team_alias(session, team, name, source)
         return team
 
     # Keep the human name / external id fresh if we learned a better value.
@@ -75,6 +150,8 @@ def get_or_create_team(
         team.name = name
     if external_id and not team.external_id:
         team.external_id = external_id
+    # Learn this spelling so future lookups (and other sources) resolve to it.
+    record_team_alias(session, team, name, source)
     return team
 
 

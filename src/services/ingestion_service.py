@@ -158,10 +158,13 @@ class IngestionService:
             player = repo.get_or_create_player(
                 session, sport, source, pdto.external_id, pdto.name, pdto.position
             )
+            # Link the player to a team that already exists (created during match
+            # ingestion). Use a non-creating lookup so a name variant in the
+            # player payload never spawns a duplicate/phantom team.
             team = None
             if pdto.team_title:
                 first_team = pdto.team_title.split(",")[0].strip()
-                team = repo.get_or_create_team(session, sport, source, None, first_team)
+                team = repo.find_team(session, sport, first_team)
             repo.upsert_player_season(
                 session, competition, season_obj, player, team, pdto
             )

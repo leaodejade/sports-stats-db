@@ -112,6 +112,25 @@ class Team(TimestampMixin, Base):
     external_id: Mapped[Optional[str]] = mapped_column(String(50), index=True)
 
 
+class TeamAlias(TimestampMixin, Base):
+    """Alternative names for a team, so different sources map to one entity.
+
+    ``alias`` is stored normalised (lower-case, accent/punctuation-stripped).
+    A given normalised alias maps to exactly one team per sport.
+    """
+
+    __tablename__ = "team_aliases"
+    __table_args__ = (
+        UniqueConstraint("sport_id", "alias", name="uq_team_alias"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    sport_id: Mapped[int] = mapped_column(ForeignKey("sports.id"), nullable=False)
+    team_id: Mapped[int] = mapped_column(ForeignKey("teams.id"), nullable=False, index=True)
+    source_id: Mapped[Optional[int]] = mapped_column(ForeignKey("data_sources.id"))
+    alias: Mapped[str] = mapped_column(String(120), nullable=False)
+
+
 class Player(TimestampMixin, Base):
     __tablename__ = "players"
     __table_args__ = (

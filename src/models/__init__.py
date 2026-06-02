@@ -28,6 +28,7 @@ from .football import (
     Sport,
     Standing,
     Team,
+    TeamAlias,
 )
 from .tennis import (
     TennisMatch,
@@ -47,6 +48,7 @@ __all__ = [
     "Competition",
     "Season",
     "Team",
+    "TeamAlias",
     "Player",
     "Match",
     "MatchTeamStat",
