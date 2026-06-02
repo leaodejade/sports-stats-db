@@ -220,6 +220,36 @@ class SimulatedBet(TimestampMixin, Base):
     market: Mapped["Market"] = relationship()
 
 
+class BetDecision(TimestampMixin, Base):
+    """Audit trail of every selection a backtest *considered*.
+
+    Records both placed and rejected decisions (with a reason and the filters in
+    force), so a backtest is reproducible and "why didn't it bet here?" is
+    answerable.
+    """
+
+    __tablename__ = "bet_decisions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    run_label: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    match_id: Mapped[int] = mapped_column(ForeignKey("matches.id"), nullable=False, index=True)
+    market_id: Mapped[int] = mapped_column(ForeignKey("markets.id"), nullable=False)
+    selection: Mapped[str] = mapped_column(String(40), nullable=False)
+    line: Mapped[Optional[float]] = mapped_column(Float)
+
+    model_name: Mapped[Optional[str]] = mapped_column(String(80))
+    model_version: Mapped[Optional[str]] = mapped_column(String(40))
+    probability: Mapped[Optional[float]] = mapped_column(Float)
+    odd: Mapped[Optional[float]] = mapped_column(Float)
+    ev: Mapped[Optional[float]] = mapped_column(Float)
+
+    decided: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    reason: Mapped[Optional[str]] = mapped_column(String(40))  # why bet / why not
+    outcome: Mapped[Optional[str]] = mapped_column(String(10))  # won/lost/push/void
+    pnl: Mapped[Optional[float]] = mapped_column(Float)
+    filters: Mapped[Optional[dict]] = mapped_column(JSON)
+
+
 class BankrollTransaction(TimestampMixin, Base):
     """Signed movements of the (paper) bankroll, in chronological order."""
 

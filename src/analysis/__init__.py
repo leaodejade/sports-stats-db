@@ -1,5 +1,5 @@
 """Analytical (read-only) queries returning pandas DataFrames."""
 
-from . import betting, football
+from . import betting, calibration, football
 
-__all__ = ["football", "betting"]
+__all__ = ["football", "betting", "calibration"]

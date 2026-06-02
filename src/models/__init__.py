@@ -4,6 +4,7 @@ from ..database.base import Base
 from . import betting, features, football, tennis  # noqa: F401  (import for side effect: table registration)
 from .betting import (
     BankrollTransaction,
+    BetDecision,
     Bookmaker,
     CurrentOdds,
     Market,
@@ -73,6 +74,7 @@ __all__ = [
     "Prediction",
     "SimulatedBet",
     "BankrollTransaction",
+    "BetDecision",
     # features
     "PrematchFeature",
 ]
