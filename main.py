@@ -14,12 +14,19 @@ from __future__ import annotations
 import pandas as pd
 import typer
 
-from src.analysis import football as fb
+import json
+from pathlib import Path
+
+from src.analysis import betting as ab
+from src.analysis import calibration as cal
 from src.analysis import data_quality as dq
+from src.analysis import football as fb
+from src.backtest import BacktestConfig, run_backtest, summarize_by
 from src.collectors import UnderstatCollector
 from src.collectors.tennis_sackmann_collector import TennisSackmannCollector
 from src.database import get_engine, init_db, session_scope
 from src.services import IngestionService
+from src.services import json_ingest as ji
 from src.services.tennis_ingestion import TennisIngestionService
 from src.utils import get_settings, setup_logging
 
@@ -225,6 +232,119 @@ def validate_command(
         else:
             typer.secho(f"Found {len(df)} violations:", fg=typer.colors.RED)
             _echo_df(df)
+
+
+# ---------------------------------------------------------------------------
+# Betting data layer: JSON ingestion (for an external odds/model system)
+# ---------------------------------------------------------------------------
+def _load_json(file: str) -> list:
+    data = json.loads(Path(file).read_text(encoding="utf-8"))
+    return data if isinstance(data, list) else [data]
+
+
+@app.command("ingest-odds-json")
+def ingest_odds_json_command(
+    file: str = typer.Option(..., "--file", "-f", help="JSON file of fixtures+odds."),
+) -> None:
+    """Load bookmaker odds from a JSON payload into the database."""
+    setup_logging(get_settings().log_level)
+    init_db()
+    with session_scope(get_engine()) as session:
+        counts = ji.ingest_odds_payload(session, _load_json(file))
+    typer.secho(f"Ingested odds: {counts}", fg=typer.colors.GREEN)
+
+
+@app.command("ingest-prediction-json")
+def ingest_prediction_json_command(
+    file: str = typer.Option(..., "--file", "-f", help="JSON file of model predictions."),
+) -> None:
+    """Load model predictions from a JSON payload into the database."""
+    setup_logging(get_settings().log_level)
+    init_db()
+    with session_scope(get_engine()) as session:
+        counts = ji.ingest_predictions_payload(session, _load_json(file))
+    typer.secho(f"Ingested predictions: {counts}", fg=typer.colors.GREEN)
+
+
+@app.command("ingest-results-json")
+def ingest_results_json_command(
+    file: str = typer.Option(..., "--file", "-f", help="JSON file of market results."),
+) -> None:
+    """Load settled market results from a JSON payload into the database."""
+    setup_logging(get_settings().log_level)
+    init_db()
+    with session_scope(get_engine()) as session:
+        counts = ji.ingest_results_payload(session, _load_json(file))
+    typer.secho(f"Ingested results: {counts}", fg=typer.colors.GREEN)
+
+
+# ---------------------------------------------------------------------------
+# Betting data layer: reporting
+# ---------------------------------------------------------------------------
+@app.command("backtest")
+def backtest_command(
+    model: str = typer.Option(..., "--model", "-m", help="model_name to backtest."),
+    version: str = typer.Option(None, "--version", help="model_version (optional)."),
+    league: str = typer.Option(None, "--league", "-l"),
+    threshold: float = typer.Option(0.0, "--threshold", "-t", help="min EV to bet."),
+    price: str = typer.Option("best", "--price", help="best | closing"),
+) -> None:
+    """Value-betting backtest over stored predictions, odds and results."""
+    setup_logging(get_settings().log_level)
+    cfg = BacktestConfig(model_name=model, model_version=version, league=league,
+                         threshold=threshold, price=price)
+    with session_scope(get_engine()) as session:
+        res = run_backtest(session, cfg)
+    typer.secho(f"Summary: {res.summary}", fg=typer.colors.CYAN)
+    for dim in ("league", "market", "odd_bucket"):
+        typer.secho(f"\nBy {dim}:", fg=typer.colors.CYAN)
+        _echo_df(summarize_by(res.bets, dim))
+
+
+@app.command("calibrate")
+def calibrate_command(
+    model: str = typer.Option(..., "--model", "-m"),
+    version: str = typer.Option(None, "--version"),
+    by: str = typer.Option(None, "--by", help="league | market (optional slice)."),
+) -> None:
+    """Probability calibration (Brier, log-loss, reliability table)."""
+    setup_logging(get_settings().log_level)
+    with session_scope(get_engine()) as session:
+        typer.secho(f"Overall: {cal.calibration_summary(session, model, version)}",
+                    fg=typer.colors.CYAN)
+        df = cal.prediction_outcomes(session, model, version)
+        _echo_df(cal.calibration_table(df), "No settled predictions yet.")
+        if by:
+            typer.secho(f"\nBy {by}:", fg=typer.colors.CYAN)
+            _echo_df(cal.calibration_by(session, by, model, version))
+
+
+@app.command("clv")
+def clv_command() -> None:
+    """Closing Line Value of recorded simulated bets."""
+    setup_logging(get_settings().log_level)
+    with session_scope(get_engine()) as session:
+        typer.secho(f"CLV summary: {ab.clv_summary(session)}", fg=typer.colors.CYAN)
+        _echo_df(ab.clv_report(session), "No bets with a closing price yet.")
+
+
+@app.command("pnl")
+def pnl_command() -> None:
+    """Profit & loss over settled simulated bets (ROI, hit rate, drawdown)."""
+    setup_logging(get_settings().log_level)
+    with session_scope(get_engine()) as session:
+        typer.secho(f"P&L: {ab.pnl_summary(session)}", fg=typer.colors.CYAN)
+        _echo_df(ab.bankroll_curve(session), "No bankroll movements yet.")
+
+
+@app.command("best-odds")
+def best_odds_command(
+    match: int = typer.Option(None, "--match", help="Filter by match id."),
+) -> None:
+    """Best available price per match/market/selection across bookmakers."""
+    setup_logging(get_settings().log_level)
+    with session_scope(get_engine()) as session:
+        _echo_df(ab.best_odds(session, match_id=match), "No odds stored yet.")
 
 
 if __name__ == "__main__":

@@ -71,13 +71,27 @@ Futebol: `sports`, `countries`, `competitions`, `seasons`, `teams`, `players`,
 `matches`, `match_team_stats`, `match_player_stats`, `shots`, `standings`,
 `player_season_stats`, `data_sources`, `ingestion_logs`.
 
-Tênis (futuro): `tennis_surfaces`, `tennis_players`, `tennis_tournaments`,
+Apostas / modelagem: `bookmakers`, `markets`, `odds_snapshots` (histórico),
+`current_odds` (última cotação), `market_results` (liquidação por mercado),
+`predictions` (saída de modelo versionada), `simulated_bets`,
+`bankroll_transactions`, `bet_decisions` (auditoria de backtest),
+`prematch_features` (features pré-jogo sem vazamento), `team_aliases` (dedupe),
+`match_context` e `fundamental_notes` (árbitro/clima/escalações estruturadas).
+
+Tênis: `tennis_surfaces`, `tennis_players`, `tennis_tournaments`,
 `tennis_matches`, `tennis_match_stats`, `tennis_rankings`.
 
 > Nota de design: `player_season_stats` e `standings` guardam agregados de
 > temporada (1 requisição por liga/temporada cada). `match_player_stats` e
 > `shots` só são preenchidos na ingestão profunda (`--with-shots`), que custa
 > ~2 requisições por partida.
+>
+> ⚠️ **Vazamento:** `matches.forecast_w/d/l` é uma **retrodição pós-jogo** do
+> Understat (derivada do xG das finalizações da própria partida). **Nunca** use
+> como feature pré-jogo nem em backtest de apostas. Para previsões de modelo use
+> a tabela `predictions`; para features pré-jogo use `prematch_features`
+> (construída só com dados anteriores ao kickoff e protegida por teste
+> anti-vazamento).
 
 ---
 
@@ -152,6 +166,60 @@ python main.py real-vs-expected --league EPL --season 2023
 
 Ligas suportadas pelo Understat: `EPL`, `La_liga`, `Bundesliga`, `Serie_A`,
 `Ligue_1`, `RFPL`. Temporada = ano de início (ex.: `2023` = 2023/24).
+
+---
+
+## Camada de apostas e modelagem
+
+O banco serve como **camada de persistência** para um sistema externo que
+scrapeia odds e roda os modelos. Esse sistema grava odds, predições e resultados
+— por código (importando `src.services.betting_repository`) ou via **JSON**
+(útil para sistemas em outra linguagem):
+
+```bash
+python main.py ingest-odds-json        --file odds.json
+python main.py ingest-prediction-json  --file predictions.json
+python main.py ingest-results-json     --file results.json
+```
+
+Formato (resumo): cada fixture é identificado por `home`, `away`, `league`,
+`season`; veja os docstrings em `src/services/json_ingest.py`. Exemplo de odds:
+
+```json
+[{"home": "Arsenal", "away": "Chelsea", "league": "EPL", "season": "2023",
+  "odds": [{"bookmaker": "Pinnacle", "market": "1x2", "selection": "home",
+            "odd": 2.10, "is_closing": true}]}]
+```
+
+Avaliação (somente leitura — nada é apostado de verdade):
+
+```bash
+python main.py backtest  --model poisson --threshold 0.05 --price closing
+python main.py calibrate --model poisson --by league
+python main.py best-odds
+python main.py clv
+python main.py pnl
+```
+
+- **backtest** — aposta de valor (`EV = prob*odd-1 > limiar`) sobre
+  `predictions` × odds × `market_results`; imprime ROI/lucro/acerto/drawdown e
+  recortes por liga, mercado e faixa de odd. Toda decisão (inclusive recusada,
+  com motivo) é auditável em `bet_decisions`.
+- **calibrate** — Brier, log-loss e tabela de confiabilidade por liga/mercado.
+- **clv / pnl / best-odds** — Closing Line Value, P&L da banca e melhor preço
+  por mercado.
+
+### Features pré-jogo (sem vazamento)
+
+`src/features/prematch.py` constrói features usando **apenas partidas anteriores
+ao kickoff** (forma, xG/xGA móveis, descanso). Um teste anti-vazamento
+(`tests/test_features.py`) falha se adulterar o resultado da própria partida
+mudar as suas features.
+
+```python
+from src.features import build_for_season
+build_for_season(session, season_id=1)   # popula prematch_features
+```
 
 ---
 
@@ -245,7 +313,15 @@ Understat, inserção de partidas (ingestão ponta-a-ponta) e consultas agregada
 
 ## Roadmap
 
-- [ ] Coletor de tênis (ex.: dataset Jeff Sackmann) populando o schema dormente
-- [ ] Migrations com Alembic (hoje o schema é criado via `create_all`)
-- [ ] Suporte a PostgreSQL (basta trocar `DATABASE_URL`)
+- [x] Coletor de tênis (dataset Jeff Sackmann) populando o schema
+- [x] Migrations com Alembic
+- [x] Suporte a PostgreSQL (basta trocar `DATABASE_URL`)
+- [x] Validação de qualidade de dados (`python main.py validate`)
+- [x] Camada de apostas: odds time-series, mercados, predições versionadas,
+      apostas simuladas, bankroll e auditoria de decisões
+- [x] Features pré-jogo sem vazamento + teste anti-vazamento
+- [x] Dedupe de times via aliases (IDs estáveis)
+- [x] Motor de backtest + calibração (por liga/mercado/faixa de odd)
+- [x] Ingestão de odds/predições/resultados via JSON + comandos de CLI
+- [ ] Coletor próprio de odds em tempo real (hoje recebidas de sistema externo)
 - [ ] Mais coletores de futebol mapeando para os mesmos DTOs
