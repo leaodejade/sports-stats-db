@@ -141,7 +141,7 @@ class Match(TimestampMixin, Base):
 
     home_team_id: Mapped[int] = mapped_column(ForeignKey("teams.id"), nullable=False)
     away_team_id: Mapped[int] = mapped_column(ForeignKey("teams.id"), nullable=False)
-    match_datetime: Mapped[Optional[datetime]] = mapped_column(DateTime, index=True)
+    match_datetime: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), index=True)
 
     home_goals: Mapped[Optional[int]] = mapped_column(Integer)
     away_goals: Mapped[Optional[int]] = mapped_column(Integer)
@@ -176,7 +176,7 @@ class MatchTeamStat(TimestampMixin, Base):
     match_id: Mapped[Optional[int]] = mapped_column(ForeignKey("matches.id"))
     season_id: Mapped[int] = mapped_column(ForeignKey("seasons.id"), nullable=False)
     team_id: Mapped[int] = mapped_column(ForeignKey("teams.id"), nullable=False)
-    match_date: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    match_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
     is_home: Mapped[Optional[bool]] = mapped_column(Boolean)
     goals: Mapped[Optional[int]] = mapped_column(Integer)
@@ -337,8 +337,8 @@ class IngestionLog(TimestampMixin, Base):
     season: Mapped[Optional[str]] = mapped_column(String(20))
     status: Mapped[str] = mapped_column(String(20), default="running")
     records_processed: Mapped[int] = mapped_column(Integer, default=0)
-    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
-    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     duration_seconds: Mapped[Optional[float]] = mapped_column(Float)
     error_message: Mapped[Optional[str]] = mapped_column(String(500))
     raw_path: Mapped[Optional[str]] = mapped_column(String(500))

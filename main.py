@@ -15,9 +15,12 @@ import pandas as pd
 import typer
 
 from src.analysis import football as fb
+from src.analysis import data_quality as dq
 from src.collectors import UnderstatCollector
+from src.collectors.tennis_sackmann_collector import TennisSackmannCollector
 from src.database import get_engine, init_db, session_scope
 from src.services import IngestionService
+from src.services.tennis_ingestion import TennisIngestionService
 from src.utils import get_settings, setup_logging
 
 app = typer.Typer(
@@ -65,6 +68,31 @@ def ingest_understat_command(
 
     typer.secho(
         f"[{result.status}] {league} {season} in {result.duration_seconds:.1f}s",
+        fg=typer.colors.GREEN if result.status == "success" else typer.colors.RED,
+    )
+    for key, value in sorted(result.counts.items()):
+        typer.echo(f"  {key}: {value}")
+
+
+@app.command("ingest-tennis")
+def ingest_tennis_command(
+    tour: str = typer.Option(..., "--tour", help="Tennis tour: ATP or WTA"),
+    season: str = typer.Option(..., "--season", help="Season year, e.g. 2023"),
+    no_cache: bool = typer.Option(
+        False, "--no-cache", help="Ignore cached raw JSON and refetch."
+    ),
+) -> None:
+    """Collect and store one tour+season of tennis data from Jeff Sackmann."""
+    settings = get_settings()
+    setup_logging(settings.log_level)
+    init_db()  # ensure schema exists
+
+    collector = TennisSackmannCollector(cache_enabled=not no_cache)
+    service = TennisIngestionService(collector=collector, engine=get_engine())
+    result = service.ingest_tennis(tour=tour, season=season)
+
+    typer.secho(
+        f"[{result.status}] {tour} {season} in {result.duration_seconds:.1f}s",
         fg=typer.colors.GREEN if result.status == "success" else typer.colors.RED,
     )
     for key, value in sorted(result.counts.items()):
@@ -181,6 +209,22 @@ def real_vs_expected_command(
     setup_logging(get_settings().log_level)
     with session_scope(get_engine()) as session:
         _echo_df(fb.real_vs_expected(session, league=league, season=season))
+
+
+@app.command("validate")
+def validate_command(
+    league: str = typer.Option(None, "--league", "-l"),
+    season: str = typer.Option(None, "--season", "-s"),
+) -> None:
+    """Run data quality validations and print violations."""
+    setup_logging(get_settings().log_level)
+    with session_scope(get_engine()) as session:
+        df = dq.run_all_validations(session)
+        if df.empty:
+            typer.secho("No violations found. Data quality is good!", fg=typer.colors.GREEN)
+        else:
+            typer.secho(f"Found {len(df)} violations:", fg=typer.colors.RED)
+            _echo_df(df)
 
 
 if __name__ == "__main__":

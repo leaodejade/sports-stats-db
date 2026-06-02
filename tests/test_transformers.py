@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from src.transformers import (
     transform_league_matches,
@@ -37,7 +37,7 @@ def test_transform_league_matches(understat_raw):
     assert first.home_goals == 1 and first.away_goals == 0
     assert first.home_xg == 1.2 and first.away_xg == 1.8
     assert first.is_result is True
-    assert first.match_datetime == datetime(2023, 10, 8, 16, 30, 0)
+    assert first.match_datetime == datetime(2023, 10, 8, 16, 30, 0, tzinfo=timezone.utc)
 
 
 def test_transform_league_teams_aggregates(understat_raw):

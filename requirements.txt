@@ -6,6 +6,12 @@ pydantic-settings>=2.1
 typer>=0.9
 python-dotenv>=1.0
 
+# Migrations
+alembic>=1.13.0
+
+# PostgreSQL Support (Optional)
+psycopg[binary]>=3.1.0
+
 # Data source (Understat)
 understatapi>=0.5
 
