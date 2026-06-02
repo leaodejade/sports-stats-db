@@ -102,12 +102,32 @@ cp .env.example .env   # Windows: copy .env.example .env
 Ajuste `.env` se quiser (caminho do banco, nível de log, delay de requisições).
 Os defaults já funcionam com SQLite em `data/processed/sports.db`.
 
+### Suporte a PostgreSQL
+
+O projeto suporta PostgreSQL caso deseje utilizá-lo em vez do SQLite padrão.
+Para começar com Postgres em ambiente de desenvolvimento, inicie o container:
+
+```bash
+docker-compose up -d
+```
+
+Então, atualize seu `.env` com a seguinte linha:
+
+```env
+DATABASE_URL=postgresql+psycopg://devuser:devpassword@localhost/sportsdb
+```
+
+Após isso, você pode rodar os comandos `alembic upgrade head` e `python main.py init-db` normalmente.
+
 ---
 
 ## Uso (CLI)
 
 ```bash
-# 1. Criar o banco e as tabelas (+ seed de referência)
+# 1. Aplicar as migrations do banco de dados (Caminho oficial)
+alembic upgrade head
+
+# 1.1 Criar o banco e as tabelas (+ seed de referência) para desenvolvimento
 python main.py init-db
 
 # 2. Ingerir uma liga + temporada do Understat

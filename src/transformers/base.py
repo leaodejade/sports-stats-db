@@ -49,16 +49,21 @@ def to_bool_home(h_a: Any) -> Optional[bool]:
     return None
 
 
+from datetime import timezone
+
 def parse_datetime(value: Any) -> Optional[datetime]:
-    """Parse Understat datetime strings, trying a few known formats."""
+    """Parse Understat datetime strings, trying a few known formats. Returns aware UTC datetime."""
     if not value:
         return None
     if isinstance(value, datetime):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
         return value
     text = str(value).strip()
     for fmt in _DATETIME_FORMATS:
         try:
-            return datetime.strptime(text, fmt)
+            dt = datetime.strptime(text, fmt)
+            return dt.replace(tzinfo=timezone.utc)
         except ValueError:
             continue
     return None

@@ -75,7 +75,7 @@ class TennisMatch(TimestampMixin, Base):
     round: Mapped[Optional[str]] = mapped_column(String(30))
     best_of: Mapped[Optional[int]] = mapped_column(Integer)
     score: Mapped[Optional[str]] = mapped_column(String(60))
-    match_date: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    match_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
     player1: Mapped["TennisPlayer"] = relationship(foreign_keys=[player1_id])
     player2: Mapped["TennisPlayer"] = relationship(foreign_keys=[player2_id])
@@ -102,6 +102,7 @@ class TennisMatchStat(TimestampMixin, Base):
     first_serve_in: Mapped[Optional[int]] = mapped_column(Integer)
     first_serve_pct: Mapped[Optional[float]] = mapped_column(Float)
     first_serve_points_won: Mapped[Optional[int]] = mapped_column(Integer)
+    serve_points: Mapped[Optional[int]] = mapped_column(Integer)
     second_serve_points_won: Mapped[Optional[int]] = mapped_column(Integer)
     service_games_won: Mapped[Optional[int]] = mapped_column(Integer)
     break_points_saved: Mapped[Optional[int]] = mapped_column(Integer)
