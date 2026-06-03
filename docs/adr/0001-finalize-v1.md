@@ -93,7 +93,10 @@ away so scale is *possible* without paying for it now.
 
 1. [x] Add `pyproject.toml` + `sports-stats` entry point; move CLI to `src/cli.py`.
 2. [x] Consolidate config into `pyproject.toml` (remove `pytest.ini`).
-3. [x] Add GitHub Actions CI (migrations + tests, 3.11/3.12).
+3. [~] GitHub Actions CI written (`docs/ci/github-actions-ci.yml`). To enable:
+   copy it to `.github/workflows/ci.yml` via the GitHub web UI (Actions tab), or
+   push it with a token that has the `workflow` scope. Kept out of
+   `.github/workflows/` here because the push token lacked that scope.
 4. [x] Add one-command setup scripts (PowerShell/bash) + `Makefile`.
 5. [x] Document fresh-machine setup and the corporate-TLS workaround in README.
 6. [ ] Tag release `v1.0.0` after merge.
