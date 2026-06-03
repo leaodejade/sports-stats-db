@@ -7,6 +7,8 @@ from .ingest import OddsIngestRaw
 from .betting import (
     BankrollTransaction,
     BetDecision,
+    BetSlip,
+    BetSlipLeg,
     Bookmaker,
     CurrentOdds,
     Market,
@@ -77,6 +79,8 @@ __all__ = [
     "SimulatedBet",
     "BankrollTransaction",
     "BetDecision",
+    "BetSlip",
+    "BetSlipLeg",
     # features
     "PrematchFeature",
     # context

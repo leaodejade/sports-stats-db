@@ -26,6 +26,7 @@ from src.collectors import UnderstatCollector
 from src.collectors.tennis_sackmann_collector import TennisSackmannCollector
 from src.database import get_engine, init_db, session_scope
 from src.services import IngestionService
+from src.services import bet_slip as bs
 from src.services import json_ingest as ji
 from src.services import odds_ingest as oi
 from src.services.tennis_ingestion import TennisIngestionService
@@ -308,6 +309,44 @@ def ingest_results_json_command(
 # ---------------------------------------------------------------------------
 # Betting data layer: reporting
 # ---------------------------------------------------------------------------
+@app.command("build-slip")
+def build_slip_command(
+    file: str = typer.Option(..., "--file", "-f", help="JSON slip spec (legs, stake...)."),
+    require_gate: bool = typer.Option(
+        True, "--require-gate/--no-require-gate",
+        help="Only use odds that passed the OCR validation gate.",
+    ),
+    min_edge: float = typer.Option(None, "--min-edge", help="Min model edge per leg."),
+) -> None:
+    """Build a bet slip behind the pre-flight gate (refuses if any leg fails)."""
+    setup_logging(get_settings().log_level)
+    spec = _load_json_obj(file)
+    with session_scope(get_engine()) as session:
+        slip = bs.build_bet_slip(
+            session,
+            legs=spec["legs"], stake=spec.get("stake", 0.0),
+            kind=spec.get("kind", "multi"), label=spec.get("label", "slip"),
+            model_name=spec.get("model_name"), model_version=spec.get("model_version"),
+            require_gate=require_gate,
+            min_edge=spec.get("min_edge", min_edge),
+            freshness_seconds=spec.get("freshness_seconds"),
+        )
+        from src.models import BetSlipLeg
+        from sqlalchemy import select as _select
+        legs = session.scalars(
+            _select(BetSlipLeg).where(BetSlipLeg.slip_id == slip.id)
+        ).all()
+        color = typer.colors.GREEN if slip.status == "ready" else typer.colors.RED
+        typer.secho(
+            f"Slip #{slip.id} [{slip.status}] odd={slip.combined_odd} ev={slip.ev}",
+            fg=color,
+        )
+        for leg in legs:
+            mark = "OK " if leg.status == "ok" else "REJ"
+            typer.echo(f"  {mark} match={leg.match_id} {leg.selection} "
+                       f"odd={leg.odd} {leg.reason or ''}")
+
+
 @app.command("backtest")
 def backtest_command(
     model: str = typer.Option(..., "--model", "-m", help="model_name to backtest."),

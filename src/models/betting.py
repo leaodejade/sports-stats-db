@@ -250,6 +250,47 @@ class BetDecision(TimestampMixin, Base):
     filters: Mapped[Optional[dict]] = mapped_column(JSON)
 
 
+class BetSlip(TimestampMixin, Base):
+    """A proposed bet slip (bilhete). Emitted only if every leg passes pre-flight.
+
+    ``status``: ``draft`` (being built) | ``rejected`` (a leg failed pre-flight) |
+    ``ready`` (all legs validated) | ``placed`` | ``settled``. Nothing here is a
+    real-money instruction — it is a vetted proposal.
+    """
+
+    __tablename__ = "bet_slips"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    label: Mapped[str] = mapped_column(String(80), nullable=False)
+    kind: Mapped[str] = mapped_column(String(10), default="multi", nullable=False)  # single|multi
+    stake: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    combined_odd: Mapped[Optional[float]] = mapped_column(Float)
+    ev: Mapped[Optional[float]] = mapped_column(Float)
+    status: Mapped[str] = mapped_column(String(12), default="draft", nullable=False, index=True)
+    reject_reason: Mapped[Optional[str]] = mapped_column(String(60))
+    model_name: Mapped[Optional[str]] = mapped_column(String(80))
+    model_version: Mapped[Optional[str]] = mapped_column(String(40))
+
+
+class BetSlipLeg(TimestampMixin, Base):
+    """One selection inside a bet slip, with its pre-flight verdict."""
+
+    __tablename__ = "bet_slip_legs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    slip_id: Mapped[int] = mapped_column(ForeignKey("bet_slips.id"), nullable=False, index=True)
+    match_id: Mapped[int] = mapped_column(ForeignKey("matches.id"), nullable=False)
+    market_id: Mapped[Optional[int]] = mapped_column(ForeignKey("markets.id"))
+    bookmaker_id: Mapped[Optional[int]] = mapped_column(ForeignKey("bookmakers.id"))
+
+    selection: Mapped[str] = mapped_column(String(40), nullable=False)
+    line: Mapped[Optional[float]] = mapped_column(Float)
+    odd: Mapped[Optional[float]] = mapped_column(Float)
+    probability: Mapped[Optional[float]] = mapped_column(Float)
+    status: Mapped[str] = mapped_column(String(12), default="ok", nullable=False)  # ok|rejected
+    reason: Mapped[Optional[str]] = mapped_column(String(60))
+
+
 class BankrollTransaction(TimestampMixin, Base):
     """Signed movements of the (paper) bankroll, in chronological order."""
 
