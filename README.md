@@ -99,22 +99,53 @@ Tênis: `tennis_surfaces`, `tennis_players`, `tennis_tournaments`,
 
 Requisitos: **Python 3.11+**.
 
-```bash
+### Rodar em outra máquina (do zero)
+
+Clone o repositório e rode **um comando**:
+
+```powershell
+# Windows (PowerShell)
+git clone https://github.com/leaodejade/sports-stats-db.git
 cd sports-stats-db
-
-python -m venv .venv
-# Windows (PowerShell):
-.venv\Scripts\Activate.ps1
-# Linux/macOS:
-source .venv/bin/activate
-
-pip install -r requirements.txt
-
-cp .env.example .env   # Windows: copy .env.example .env
+./scripts/setup.ps1
 ```
 
-Ajuste `.env` se quiser (caminho do banco, nível de log, delay de requisições).
-Os defaults já funcionam com SQLite em `data/processed/sports.db`.
+```bash
+# Linux/macOS
+git clone https://github.com/leaodejade/sports-stats-db.git
+cd sports-stats-db
+bash scripts/setup.sh      # ou: make setup
+```
+
+O script cria o `.venv`, instala o pacote, gera o `.env` e aplica as migrations.
+Depois, ative o ambiente e use o comando `sports-stats`:
+
+```bash
+sports-stats --help
+sports-stats ingest-understat --league EPL --season 2023
+```
+
+### Instalação manual (equivalente)
+
+```bash
+python -m venv .venv
+# Windows: .venv\Scripts\Activate.ps1   |   Linux/macOS: source .venv/bin/activate
+pip install -e ".[dev]"          # +"[postgres]" para o driver do PostgreSQL
+cp .env.example .env             # Windows: copy .env.example .env
+alembic upgrade head             # cria o schema (caminho oficial)
+```
+
+`pip install -e .` instala o pacote e o comando de CLI `sports-stats`. Os
+defaults já funcionam com SQLite em `data/processed/sports.db`; ajuste o `.env`
+se quiser.
+
+> **Rede corporativa / erro de SSL ao coletar:** se a coleta do Understat
+> falhar com `CERTIFICATE_VERIFY_FAILED`, sua rede faz inspeção de TLS. Aponte o
+> certificado da empresa via variável de ambiente, sem desabilitar verificação:
+> `setx REQUESTS_CA_BUNDLE "C:\caminho\corp-ca.pem"` (Windows) /
+> `export REQUESTS_CA_BUNDLE=/caminho/corp-ca.pem` (Linux). Os dados já
+> coletados ficam em `data/raw/` e são reutilizados (cache), então a coleta só
+> ocorre uma vez por liga/temporada.
 
 ### Suporte a PostgreSQL
 

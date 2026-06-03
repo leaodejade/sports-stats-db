@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sports-stats-db"
+version = "1.0.0"
+description = "Local, validated football stats + betting data layer (Understat), tennis-ready."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "leaodejade" }]
+keywords = ["football", "xg", "understat", "betting", "odds", "backtest"]
+
+dependencies = [
+    "pandas>=2.1",
+    "SQLAlchemy>=2.0",
+    "pydantic>=2.5",
+    "pydantic-settings>=2.1",
+    "typer>=0.9",
+    "python-dotenv>=1.0",
+    "alembic>=1.13.0",
+    "understatapi>=0.5",
+]
+
+[project.optional-dependencies]
+postgres = ["psycopg[binary]>=3.1.0"]
+dev = ["pytest>=7.4"]
+
+[project.scripts]
+# After `pip install`, run the CLI as `sports-stats ...`.
+sports-stats = "src.cli:app"
+
+[project.urls]
+Repository = "https://github.com/leaodejade/sports-stats-db"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-ra -q"
