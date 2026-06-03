@@ -27,6 +27,7 @@ from src.collectors.tennis_sackmann_collector import TennisSackmannCollector
 from src.database import get_engine, init_db, session_scope
 from src.services import IngestionService
 from src.services import json_ingest as ji
+from src.services import odds_ingest as oi
 from src.services.tennis_ingestion import TennisIngestionService
 from src.utils import get_settings, setup_logging
 
@@ -242,6 +243,10 @@ def _load_json(file: str) -> list:
     return data if isinstance(data, list) else [data]
 
 
+def _load_json_obj(file: str) -> dict:
+    return json.loads(Path(file).read_text(encoding="utf-8"))
+
+
 @app.command("ingest-odds-json")
 def ingest_odds_json_command(
     file: str = typer.Option(..., "--file", "-f", help="JSON file of fixtures+odds."),
@@ -252,6 +257,28 @@ def ingest_odds_json_command(
     with session_scope(get_engine()) as session:
         counts = ji.ingest_odds_payload(session, _load_json(file))
     typer.secho(f"Ingested odds: {counts}", fg=typer.colors.GREEN)
+
+
+@app.command("ingest-odds-capture")
+def ingest_odds_capture_command(
+    file: str = typer.Option(..., "--file", "-f", help="JSON capture from OCR/screenshots."),
+    min_confidence: float = typer.Option(
+        0.0, "--min-confidence", help="Reject captures below this OCR confidence."
+    ),
+    no_promote: bool = typer.Option(
+        False, "--no-promote", help="Only stage+validate; do not promote."
+    ),
+) -> None:
+    """Gated ingestion of OCR odds: stage -> validate -> promote to odds tables."""
+    setup_logging(get_settings().log_level)
+    init_db()
+    with session_scope(get_engine()) as session:
+        report = oi.ingest_capture(
+            session, _load_json_obj(file), min_confidence=min_confidence,
+            promote=not no_promote,
+        )
+    color = typer.colors.GREEN if report["rejected"] == 0 else typer.colors.YELLOW
+    typer.secho(f"Capture report: {report}", fg=color)
 
 
 @app.command("ingest-prediction-json")
