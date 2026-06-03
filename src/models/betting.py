@@ -29,6 +29,7 @@ from typing import Optional
 from sqlalchemy import (
     JSON,
     Boolean,
+    CheckConstraint,
     DateTime,
     Float,
     ForeignKey,
@@ -79,6 +80,7 @@ class OddsSnapshot(TimestampMixin, Base):
             "ix_odds_snap_match_market_sel_time",
             "match_id", "market_id", "selection", "captured_at",
         ),
+        CheckConstraint("odd > 1.0", name="ck_odds_snapshot_odd"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -110,6 +112,7 @@ class CurrentOdds(TimestampMixin, Base):
             "match_id", "bookmaker_id", "market_id", "selection", "line",
             name="uq_current_odds",
         ),
+        CheckConstraint("odd > 1.0", name="ck_current_odds_odd"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -171,6 +174,9 @@ class Prediction(TimestampMixin, Base):
             "match_id", "model_name", "model_version", "market_id", "selection", "line",
             name="uq_prediction",
         ),
+        CheckConstraint(
+            "probability >= 0 AND probability <= 1", name="ck_prediction_prob"
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -197,6 +203,10 @@ class SimulatedBet(TimestampMixin, Base):
     """A (paper) bet placed against a stored price. No real-money promotion."""
 
     __tablename__ = "simulated_bets"
+    __table_args__ = (
+        CheckConstraint("stake > 0", name="ck_simulated_bet_stake"),
+        CheckConstraint("odd_taken > 1.0", name="ck_simulated_bet_odd"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     match_id: Mapped[int] = mapped_column(ForeignKey("matches.id"), nullable=False, index=True)

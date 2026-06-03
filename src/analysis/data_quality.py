@@ -1,10 +1,11 @@
 """Data quality validation checks."""
 
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 import pandas as pd
 from sqlalchemy import select, func, Float, String, desc
 from sqlalchemy.orm import Session
 from ..models.football import Match, MatchTeamStat, Shot
+from ..models.betting import Market, MarketResult
 
 def validate_xg_sums(session: Session, tolerance: float = 0.05) -> pd.DataFrame:
     """Check if the sum of shot xG approximately equals the match xG for each team."""
@@ -103,6 +104,62 @@ def validate_match_team_stats_linked(session: Session) -> pd.DataFrame:
         )
     )
     return pd.read_sql(stmt, session.connection())
+
+def _expected_outcome(
+    code: str, selection: str, line: Optional[float], hg: int, ag: int
+) -> Optional[str]:
+    """Derive the correct outcome of a selection from the final score.
+
+    Returns "won"/"lost"/"push" for derivable markets, or None to skip.
+    """
+    sel = (selection or "").strip().lower()
+    total = hg + ag
+    if code == "1x2":
+        winner = "home" if hg > ag else "away" if ag > hg else "draw"
+        return "won" if sel == winner else "lost"
+    if code == "btts":
+        both = hg > 0 and ag > 0
+        if sel == "yes":
+            return "won" if both else "lost"
+        if sel == "no":
+            return "won" if not both else "lost"
+    if code == "ou" and line is not None:
+        if total == line:
+            return "push"
+        if sel == "over":
+            return "won" if total > line else "lost"
+        if sel == "under":
+            return "won" if total < line else "lost"
+    return None
+
+
+def validate_market_settlements(session: Session) -> pd.DataFrame:
+    """Cross-check recorded ``market_results`` against the actual final score.
+
+    Flags any settlement that disagrees with the score for derivable markets
+    (1x2, BTTS, Over/Under) — catches a wrong liquidation before it skews P&L.
+    """
+    rows = []
+    stmt = (
+        select(MarketResult, Match, Market)
+        .join(Match, Match.id == MarketResult.match_id)
+        .join(Market, Market.id == MarketResult.market_id)
+        .where(Match.home_goals.is_not(None), Match.away_goals.is_not(None))
+    )
+    for mr, match, market in session.execute(stmt).all():
+        expected = _expected_outcome(
+            market.code, mr.selection, mr.line, match.home_goals, match.away_goals
+        )
+        if expected is not None and expected != (mr.outcome or "").lower():
+            rows.append({
+                "match_id": mr.match_id, "market": market.code,
+                "selection": mr.selection, "line": mr.line,
+                "recorded": mr.outcome, "expected": expected,
+            })
+    return pd.DataFrame(
+        rows, columns=["match_id", "market", "selection", "line", "recorded", "expected"]
+    )
+
 
 def run_all_validations(session: Session) -> pd.DataFrame:
     """Runs all validations and returns a summary DataFrame of violations."""

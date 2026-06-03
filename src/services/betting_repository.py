@@ -406,3 +406,41 @@ def settle_bet(
         _add_transaction(session, "return", gross_return, when, bet_id=bet.id,
                          note=f"return bet#{bet.id} ({outcome})")
     return bet
+
+
+# ---------------------------------------------------------------------------
+# Maintenance: deterministic closing line
+# ---------------------------------------------------------------------------
+def mark_closing_odds(session: Session, match_id: Optional[int] = None) -> int:
+    """Flag the closing snapshot deterministically per selection/bookmaker.
+
+    The closing price is the LAST snapshot captured at/before kickoff for each
+    (bookmaker, market, selection, line). Everything else is set non-closing, so
+    ``is_closing`` no longer depends on whoever wrote the row. Returns the number
+    of snapshots marked closing.
+    """
+    stmt = select(Match).where(Match.match_datetime.is_not(None))
+    if match_id is not None:
+        stmt = stmt.where(Match.id == match_id)
+    matches = session.scalars(stmt).all()
+
+    marked = 0
+    for match in matches:
+        snaps = session.scalars(
+            select(OddsSnapshot).where(OddsSnapshot.match_id == match.id)
+        ).all()
+        for s in snaps:
+            s.is_closing = False
+        best: dict[tuple, OddsSnapshot] = {}
+        for s in snaps:
+            if s.captured_at is None or s.captured_at > match.match_datetime:
+                continue
+            key = (s.bookmaker_id, s.market_id, s.selection, s.line)
+            cur = best.get(key)
+            if cur is None or s.captured_at > cur.captured_at:
+                best[key] = s
+        for s in best.values():
+            s.is_closing = True
+            marked += 1
+    session.flush()
+    return marked

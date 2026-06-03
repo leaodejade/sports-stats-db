@@ -24,14 +24,11 @@ from sqlalchemy.orm import Session
 from ..models import (
     BetDecision,
     Competition,
-    CurrentOdds,
     Market,
     MarketResult,
     Match,
     OddsSnapshot,
     Prediction,
-    Season,
-    Team,
 )
 
 ODD_BUCKETS = [1.0, 1.5, 2.0, 3.0, 5.0, 10.0, float("inf")]
@@ -44,7 +41,10 @@ class BacktestConfig:
     league: Optional[str] = None        # competition code filter
     threshold: float = 0.0              # minimum EV to place a bet
     stake: float = 1.0
-    price: str = "best"                # "best" (max book) | "closing"
+    # "best_prematch" (best snapshot captured <= kickoff) | "closing".
+    # NB: deliberately never prices from current_odds, which can hold an
+    # in-play/post-kickoff price and would leak the result into the backtest.
+    price: str = "best_prematch"
     min_prob: float = 0.0
     odd_min: Optional[float] = None
     odd_max: Optional[float] = None
@@ -71,32 +71,27 @@ def _utcnow() -> datetime:
 
 
 def _odd_for(
-    session: Session, pred: Prediction, price: str
+    session: Session, pred: Prediction, price: str, kickoff
 ) -> Optional[float]:
+    """Best stored price for a prediction, restricted to pre-kickoff snapshots.
+
+    Prices only from ``odds_snapshots`` captured at/before ``kickoff`` so a
+    backtest can never use an in-play or post-match price.
+    """
     line_pred = (
         OddsSnapshot.line.is_(None) if pred.line is None else OddsSnapshot.line == pred.line
     )
+    stmt = select(func.max(OddsSnapshot.odd)).where(
+        OddsSnapshot.match_id == pred.match_id,
+        OddsSnapshot.market_id == pred.market_id,
+        OddsSnapshot.selection == pred.selection,
+        line_pred,
+    )
     if price == "closing":
-        return session.scalar(
-            select(func.max(OddsSnapshot.odd)).where(
-                OddsSnapshot.match_id == pred.match_id,
-                OddsSnapshot.market_id == pred.market_id,
-                OddsSnapshot.selection == pred.selection,
-                OddsSnapshot.is_closing.is_(True),
-                line_pred,
-            )
-        )
-    line_cur = (
-        CurrentOdds.line.is_(None) if pred.line is None else CurrentOdds.line == pred.line
-    )
-    return session.scalar(
-        select(func.max(CurrentOdds.odd)).where(
-            CurrentOdds.match_id == pred.match_id,
-            CurrentOdds.market_id == pred.market_id,
-            CurrentOdds.selection == pred.selection,
-            line_cur,
-        )
-    )
+        stmt = stmt.where(OddsSnapshot.is_closing.is_(True))
+    if kickoff is not None:
+        stmt = stmt.where(OddsSnapshot.captured_at <= kickoff)
+    return session.scalar(stmt)
 
 
 def _result_for(session: Session, pred: Prediction) -> Optional[str]:
@@ -139,8 +134,9 @@ def run_backtest(
             continue
         market = session.get(Market, pred.market_id)
         league = comp.code if comp else None
+        kickoff = match.match_datetime if match else None
 
-        odd = _odd_for(session, pred, config.price)
+        odd = _odd_for(session, pred, config.price, kickoff)
         ev = (pred.probability * odd - 1.0) if odd else None
 
         decided, reason, outcome, pnl = False, None, None, None
