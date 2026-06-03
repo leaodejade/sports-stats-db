@@ -118,12 +118,17 @@ bash scripts/setup.sh      # ou: make setup
 ```
 
 O script cria o `.venv`, instala o pacote, gera o `.env` e aplica as migrations.
-Depois, ative o ambiente e use o comando `sports-stats`:
+Depois, ative o ambiente e **popule o banco com um comando**:
 
 ```bash
 sports-stats --help
-sports-stats ingest-understat --league EPL --season 2023
+sports-stats bootstrap                                   # EPL 2021-2023 + features
+sports-stats bootstrap --leagues all --from 2019 --to 2023   # 6 ligas, 5 temporadas
 ```
+
+O `bootstrap` ingere várias ligas × temporadas e já constrói as features
+pré-jogo, de uma vez. (Para uma liga/temporada só: `sports-stats
+ingest-understat --league EPL --season 2023`.)
 
 ### Instalação manual (equivalente)
 

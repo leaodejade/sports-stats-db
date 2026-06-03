@@ -24,8 +24,10 @@ from src.analysis import football as fb
 from src.backtest import BacktestConfig, run_backtest, summarize_by
 from src.collectors import UnderstatCollector
 from src.collectors.tennis_sackmann_collector import TennisSackmannCollector
+from src.collectors.understat_collector import UNDERSTAT_LEAGUES
 from src.database import get_engine, init_db, session_scope
 from src.services import IngestionService
+from src.services.bootstrap import bootstrap as run_bootstrap
 from src.services import bet_slip as bs
 from src.services import json_ingest as ji
 from src.services import odds_ingest as oi
@@ -53,6 +55,52 @@ def init_db_command() -> None:
     setup_logging(get_settings().log_level)
     init_db()
     typer.secho("Database initialised.", fg=typer.colors.GREEN)
+
+
+@app.command("bootstrap")
+def bootstrap_command(
+    leagues: str = typer.Option(
+        "EPL", "--leagues", help="Comma-separated league codes, or 'all' for the 6 Understat leagues."
+    ),
+    season_from: int = typer.Option(2021, "--from", help="First season start year."),
+    season_to: int = typer.Option(2023, "--to", help="Last season start year (inclusive)."),
+    features: bool = typer.Option(
+        True, "--features/--no-features", help="Build pre-match features after ingesting."
+    ),
+    with_shots: bool = typer.Option(
+        False, "--with-shots", help="Also fetch per-match shots & rosters (slow)."
+    ),
+    no_cache: bool = typer.Option(False, "--no-cache", help="Ignore cached raw JSON."),
+) -> None:
+    """One-shot setup: ingest many leagues x seasons (+ features). Ideal on a new machine.
+
+    Examples:
+        sports-stats bootstrap                         # EPL 2021-2023 + features
+        sports-stats bootstrap --leagues all --from 2019 --to 2023
+    """
+    setup_logging(get_settings().log_level)
+    codes = list(UNDERSTAT_LEAGUES) if leagues.strip().lower() == "all" else [
+        c.strip() for c in leagues.split(",") if c.strip()
+    ]
+    seasons = [str(y) for y in range(season_from, season_to + 1)]
+    typer.secho(
+        f"Bootstrapping {len(codes)} league(s) x {len(seasons)} season(s)...",
+        fg=typer.colors.CYAN,
+    )
+    collector = UnderstatCollector(cache_enabled=not no_cache)
+    report = run_bootstrap(
+        collector=collector, engine=get_engine(), leagues=codes, seasons=seasons,
+        with_features=features, with_shots=with_shots,
+    )
+    summary = report.as_dict()
+    color = typer.colors.GREEN if summary["failed"] == 0 else typer.colors.YELLOW
+    typer.secho(
+        f"Done: {summary['ingested']} ingested, {summary['failed']} failed, "
+        f"{summary['features_built']} feature rows built.",
+        fg=color,
+    )
+    for league, season, err in report.failures:
+        typer.secho(f"  FAILED {league} {season}: {err}", fg=typer.colors.RED)
 
 
 @app.command("ingest-understat")
